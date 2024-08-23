@@ -1,0 +1,6 @@
+project     = "cj"
+env         = "prod"
+location    = "centralindia"
+webvm_count = "2"
+dbadmin     = "psqladmin"
+dbpass      = "H@Sh1CoR3!"
