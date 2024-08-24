@@ -12,43 +12,42 @@ provider "azurerm" {
 }
 
 resource "azurerm_resource_group" "rg" {
-  name     = "rg-${var.project}-${var.env}"
+  name     = "rg-${var.p_short}-${var.e_short}-${var.l_short}"
   location = var.location
 }
 
 resource "azurerm_cdn_frontdoor_profile" "fd" {
-  name                = "fd-${var.project}-${var.env}"
+  name                = "fd-${var.p_short}-${var.e_short}-${var.l_short}"
   resource_group_name = azurerm_resource_group.rg.name
   sku_name            = "Standard_AzureFrontDoor"
 }
 
 resource "azurerm_network_security_group" "nsg" {
-  name                = "nsg-${var.project}-${var.env}"
+  name                = "nsg-${var.p_short}-${var.e_short}-${var.l_short}"
   location            = var.location
   resource_group_name = azurerm_resource_group.rg.name
 }
 
 resource "azurerm_virtual_network" "vnet" {
-  name                = "vnet-${var.project}-${var.env}"
+  name                = "vnet-${var.p_short}-${var.e_short}-${var.l_short}"
   location            = var.location
   resource_group_name = azurerm_resource_group.rg.name
-  address_space       = ["10.0.0.0/24"]
-
+  address_space       = var.vnet_space
 }
 
-resource "azurerm_subnet" "subnet1" {
+resource "azurerm_subnet" "web" {
   virtual_network_name = azurerm_virtual_network.vnet.name
   resource_group_name  = azurerm_resource_group.rg.name
-  name                 = "subnet1"
-  address_prefixes     = ["10.0.0.0/26"]
+  name                 = "snet-web-${var.p_short}-${var.e_short}-${var.l_short}"
+  address_prefixes     = var.snet_web
   service_endpoints    = ["Microsoft.Sql", "Microsoft.Storage", "Microsoft.KeyVault"]
 }
 
-resource "azurerm_subnet" "subnet2" {
+resource "azurerm_subnet" "db" {
   virtual_network_name = azurerm_virtual_network.vnet.name
   resource_group_name  = azurerm_resource_group.rg.name
-  name                 = "subnet2"
-  address_prefixes     = ["10.0.0.64/26"]
+  name                 = "snet-db-${var.p_short}-${var.e_short}-${var.l_short}"
+  address_prefixes     = var.snet_db
 
   service_endpoints = ["Microsoft.Storage", "Microsoft.KeyVault"]
 
@@ -61,45 +60,110 @@ resource "azurerm_subnet" "subnet2" {
   }
 }
 
-resource "azurerm_subnet" "subnet3" {
-  name                 = "AzureBastionSubnet"
-  resource_group_name  = azurerm_resource_group.rg.name
-  virtual_network_name = azurerm_virtual_network.vnet.name
-  address_prefixes     = ["10.0.0.128/26"]
+# resource "azurerm_subnet" "bastion" {
+#   name                 = "AzureBastionSubnet"
+#   resource_group_name  = azurerm_resource_group.rg.name
+#   virtual_network_name = azurerm_virtual_network.vnet.name
+#   address_prefixes     = var.snet_bastion
+# }
+
+# resource "azurerm_public_ip" "pip-bastion" {
+#   name                = "pip-bas -${var.p_short}-${var.e_short}-${var.l_short}"
+#   location            = var.location
+#   resource_group_name = azurerm_resource_group.rg.name
+#   allocation_method   = "Static"
+#   sku                 = "Standard"
+# }
+
+# resource "azurerm_bastion_host" "bastion" {
+#   name                = "bas-${var.p_short}-${var.e_short}-${var.l_short}"
+#   location            = var.location
+#   resource_group_name = azurerm_resource_group.rg.name
+
+#   ip_configuration {
+#     name                 = "configuration"
+#     subnet_id            = azurerm_subnet.bastion.id
+#     public_ip_address_id = azurerm_public_ip.pip-bastion.id
+#   }
+# }
+
+resource "azurerm_subnet_network_security_group_association" "nsg-web" {
+  subnet_id                 = azurerm_subnet.web.id
+  network_security_group_id = azurerm_network_security_group.nsg.id
 }
 
-resource "azurerm_public_ip" "pip-bastion" {
-  name                = "pip-${var.project}-${var.env}-bastion"
+resource "azurerm_subnet_network_security_group_association" "nsg-db" {
+  subnet_id                 = azurerm_subnet.db.id
+  network_security_group_id = azurerm_network_security_group.nsg.id
+}
+
+resource "azurerm_public_ip" "pip-vm" {
+  name                = "pip-vm-${var.p_short}-${var.e_short}-${var.l_short}"
   location            = var.location
   resource_group_name = azurerm_resource_group.rg.name
   allocation_method   = "Static"
-  sku                 = "Standard"
 }
 
-resource "azurerm_bastion_host" "bastion" {
-  name                = "${var.project}-${var.env}-bastion"
+resource "azurerm_network_interface" "nic-vm" {
+  name                = "nic-vm-${var.p_short}-${var.e_short}-${var.l_short}"
   location            = var.location
   resource_group_name = azurerm_resource_group.rg.name
 
   ip_configuration {
-    name                 = "configuration"
-    subnet_id            = azurerm_subnet.subnet3.id
-    public_ip_address_id = azurerm_public_ip.pip-bastion.id
+    name                          = "internal"
+    subnet_id                     = azurerm_subnet.web.id
+    private_ip_address_allocation = "Dynamic"
+    public_ip_address_id          = azurerm_public_ip.pip-vm.id
   }
 }
 
-resource "azurerm_subnet_network_security_group_association" "nsg-subnet1" {
-  subnet_id                 = azurerm_subnet.subnet1.id
-  network_security_group_id = azurerm_network_security_group.nsg.id
+resource "azurerm_linux_virtual_machine" "vm" {
+  name                = "vm-${var.p_short}-${var.e_short}-${var.l_short}"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = var.location
+  size                = var.webvm_size
+  admin_username      = var.vm_user
+  network_interface_ids = [
+    azurerm_network_interface.nic-vm.id,
+  ]
+
+  admin_ssh_key {
+    username   = var.vm_user
+    public_key = file("../sshkey/adminuser_rsa.pub")
+  }
+
+  os_disk {
+    name                 = "osdiskvm${var.p_short}${var.e_short}${var.l_short}"
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts"
+    version   = "latest"
+  }
 }
 
-resource "azurerm_subnet_network_security_group_association" "nsg-subnet2" {
-  subnet_id                 = azurerm_subnet.subnet2.id
-  network_security_group_id = azurerm_network_security_group.nsg.id
+resource "azurerm_managed_disk" "data-vm" {
+  name                 = "diskvm${var.p_short}${var.e_short}${var.l_short}"
+  location             = var.location
+  resource_group_name  = azurerm_resource_group.rg.name
+  storage_account_type = "Standard_LRS"
+  create_option        = "Empty"
+  disk_size_gb         = var.data_disk_size_gb
+}
+
+resource "azurerm_virtual_machine_data_disk_attachment" "disk-asso-vm" {
+  managed_disk_id    = azurerm_managed_disk.data-vm.id
+  virtual_machine_id = azurerm_linux_virtual_machine.vm.id
+  lun                = "10"
+  caching            = "ReadWrite"
 }
 
 resource "azurerm_public_ip" "pip" {
-  name                = "pip-${var.project}-${var.env}"
+  name                = "pip-${var.p_short}-${var.e_short}-${var.l_short}"
   location            = var.location
   resource_group_name = azurerm_resource_group.rg.name
   allocation_method   = "Static"
@@ -107,7 +171,7 @@ resource "azurerm_public_ip" "pip" {
 }
 
 resource "azurerm_lb" "lb" {
-  name                = "lb-${var.project}-${var.env}"
+  name                = "lbi-${var.p_short}-${var.e_short}-${var.l_short}"
   location            = var.location
   resource_group_name = azurerm_resource_group.rg.name
   sku                 = "Standard"
@@ -176,13 +240,13 @@ resource "azurerm_lb_outbound_rule" "outbount" {
 
 resource "azurerm_network_interface" "nic" {
   count               = var.webvm_count
-  name                = "nic-${var.project}-${var.env}-${count.index}"
+  name                = "nic-${var.p_short}-${var.e_short}-${var.l_short}-${count.index}"
   location            = var.location
   resource_group_name = azurerm_resource_group.rg.name
 
   ip_configuration {
     name                          = "internal"
-    subnet_id                     = azurerm_subnet.subnet1.id
+    subnet_id                     = azurerm_subnet.web.id
     private_ip_address_allocation = "Dynamic"
   }
 }
@@ -194,23 +258,24 @@ resource "azurerm_network_interface_backend_address_pool_association" "nic-pool"
   backend_address_pool_id = azurerm_lb_backend_address_pool.pool.id
 }
 
-resource "azurerm_linux_virtual_machine" "vm" {
+resource "azurerm_linux_virtual_machine" "web" {
   count               = var.webvm_count
-  name                = "vm-${var.project}-${var.env}-${count.index}"
+  name                = "web-${var.p_short}-${var.e_short}-${var.l_short}-${count.index}"
   resource_group_name = azurerm_resource_group.rg.name
   location            = var.location
-  size                = "Standard_F2"
-  admin_username      = "adminuser"
+  size                = var.webvm_size
+  admin_username      = var.vm_user
   network_interface_ids = [
     azurerm_network_interface.nic[count.index].id,
   ]
 
   admin_ssh_key {
-    username   = "adminuser"
+    username   = var.vm_user
     public_key = file("../sshkey/adminuser_rsa.pub")
   }
 
   os_disk {
+    name                 = "osdiskweb${var.p_short}${var.e_short}${var.l_short}${count.index}"
     caching              = "ReadWrite"
     storage_account_type = "Standard_LRS"
   }
@@ -224,24 +289,25 @@ resource "azurerm_linux_virtual_machine" "vm" {
 }
 
 resource "azurerm_managed_disk" "data" {
-  count = var.webvm_count
-  name                 = "data-vm-${var.project}-${var.env}-${count.index}"
+  count                = var.webvm_count
+  name                 = "diskweb${var.p_short}${var.e_short}${var.l_short}${count.index}"
   location             = var.location
   resource_group_name  = azurerm_resource_group.rg.name
   storage_account_type = "Standard_LRS"
   create_option        = "Empty"
-  disk_size_gb         = 64
+  disk_size_gb         = var.data_disk_size_gb
 }
 
 resource "azurerm_virtual_machine_data_disk_attachment" "disk-asso" {
+  count              = var.webvm_count
   managed_disk_id    = azurerm_managed_disk.data[count.index].id
-  virtual_machine_id = azurerm_virtual_machine.vm[count.index].id
+  virtual_machine_id = azurerm_linux_virtual_machine.web[count.index].id
   lun                = "10"
   caching            = "ReadWrite"
 }
 
 resource "azurerm_storage_account" "staccount" {
-  name                     = "st${var.project}${var.env}"
+  name                     = "st${var.p_short}${var.e_short}${var.l_short}"
   resource_group_name      = azurerm_resource_group.rg.name
   location                 = var.location
   account_tier             = "Premium"
@@ -250,12 +316,13 @@ resource "azurerm_storage_account" "staccount" {
 
   network_rules {
     default_action             = "Deny"
-    virtual_network_subnet_ids = [azurerm_subnet.subnet1.id, azurerm_subnet.subnet2.id]
+    virtual_network_subnet_ids = [azurerm_subnet.web.id, azurerm_subnet.db.id]
+    ip_rules                   = var.ip_allow
   }
 }
 
 resource "azurerm_private_dns_zone" "dns-zome" {
-  name                = "cj.mysql.database.azure.com"
+  name                = "${var.p_short}.mysql.database.azure.com"
   resource_group_name = azurerm_resource_group.rg.name
 }
 
@@ -267,16 +334,20 @@ resource "azurerm_private_dns_zone_virtual_network_link" "vnet-link" {
 }
 
 resource "azurerm_mysql_flexible_server" "mysql" {
-  name                   = "db-${var.project}-${var.env}"
+  name                   = "mysql-${var.p_short}-${var.e_short}-${var.l_short}"
   resource_group_name    = azurerm_resource_group.rg.name
   location               = var.location
   administrator_login    = var.dbadmin
   administrator_password = var.dbpass
   backup_retention_days  = 7
-  delegated_subnet_id    = azurerm_subnet.subnet2.id
+  delegated_subnet_id    = azurerm_subnet.db.id
   private_dns_zone_id    = azurerm_private_dns_zone.dns-zome.id
   sku_name               = "GP_Standard_D2ads_v5"
-  zone                   = "3"
+  version = "8.0.21"
+
+  lifecycle {
+    ignore_changes = [ zone ]
+  }
 
   storage {
     size_gb = 20
@@ -288,7 +359,7 @@ resource "azurerm_mysql_flexible_server" "mysql" {
 data "azurerm_client_config" "current" {}
 
 resource "azurerm_key_vault" "kv" {
-  name                        = "kv-${var.project}-${var.env}"
+  name                        = "kv-${var.p_short}-${var.e_short}-${var.l_short}"
   location                    = var.location
   resource_group_name         = azurerm_resource_group.rg.name
   enabled_for_disk_encryption = true
@@ -318,13 +389,13 @@ resource "azurerm_key_vault" "kv" {
   network_acls {
     bypass                     = "AzureServices"
     default_action             = "Deny"
-    virtual_network_subnet_ids = [azurerm_subnet.subnet1.id, azurerm_subnet.subnet2.id]
-    ip_rules                   = ["118.185.107.125"]
+    virtual_network_subnet_ids = [azurerm_subnet.web.id, azurerm_subnet.db.id]
+    ip_rules                   = var.ip_allow
   }
 
 }
 
-resource "azurerm_key_vault_secret" "example" {
+resource "azurerm_key_vault_secret" "key" {
   name         = "sshkey"
   value        = replace(file("../sshkey/adminuser_rsa"), "/\n/", "\n")
   key_vault_id = azurerm_key_vault.kv.id
