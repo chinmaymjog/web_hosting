@@ -36,6 +36,7 @@ override.tf.json
 terraform.rc
 .terraform.lock.hcl
 adminuser_rsa*
+c4eadmin_rsa*
 ansible
 docker*
 Docker*
