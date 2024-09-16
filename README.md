@@ -7,7 +7,7 @@ I’ve had the exciting opportunity to architect and build a hosting platform on
 
 In this first part, I’ll break down the Azure infrastructure we designed. We’ll dive into the architectural decisions, the resource group setup, networking components, and the security considerations that formed the backbone of our hosting platform. Whether you’re new to Azure or experienced, you’ll gain insights into best practices and key features that Azure offers for building resilient, scalable infrastructure.
 
-## Part 2: Terraform Script for Azure Infrastructure
+## Part 2: [Terraform Script for Azure Infrastructure](./docs/Part_2.md)
 
 Once the architecture is defined, the next step is to automate the deployment of this infrastructure. In this part, I’ll share the Terraform scripts we used to build the Azure infrastructure. We’ll go through the code, explaining how each resource is created and managed. You’ll learn how to use Terraform to ensure your infrastructure is consistent, repeatable, and version-controlled.
 
